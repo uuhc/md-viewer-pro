@@ -10,6 +10,7 @@
 import { ref, watch, onMounted, nextTick, onUnmounted } from 'vue';
 import { marked } from 'marked';
 import hljs from 'highlight.js';
+import { globalThemeState, onThemeChange } from '../composables/useTheme';
 
 const props = defineProps({
   content: {
@@ -24,6 +25,7 @@ const contentRef = ref(null);
 const renderedContent = ref('');
 let styleLink = null;
 let themeObserver = null;
+let themeUnsubscribe = null;
 
 // 根据主题加载对应的 highlight.js 样式
 const loadHighlightStyle = (isDark) => {
@@ -32,34 +34,57 @@ const loadHighlightStyle = (isDark) => {
     styleLink.remove();
     styleLink = null;
   }
-  
+
   // 创建新的样式链接
   styleLink = document.createElement('link');
   styleLink.rel = 'stylesheet';
   styleLink.id = 'highlight-style';
   // 使用 CDN，稳定可靠
-  styleLink.href = isDark 
+  styleLink.href = isDark
     ? 'https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css'
     : 'https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css';
+
+  // 添加加载失败的处理
+  styleLink.onerror = () => {
+    console.warn('代码高亮样式加载失败，使用内联样式');
+    // 如果 CDN 加载失败，依赖内联的 CSS 样式
+  };
+
   document.head.appendChild(styleLink);
 };
 
-// 检测当前主题
+// 检测当前主题（兼容性方法，优先使用全局状态）
 const getCurrentTheme = () => {
-  return document.documentElement.classList.contains('dark-theme') ? 'dark' : 'light';
+  return globalThemeState.isDark ? 'dark' : 'light';
 };
 
 // 初始化样式
 const initHighlightStyle = () => {
-  const isDark = getCurrentTheme() === 'dark';
+  const isDark = globalThemeState.isDark;
   loadHighlightStyle(isDark);
 };
 
-// 监听主题变化
+// 监听主题变化（使用全局主题状态）
 const observeThemeChange = () => {
-  const observer = new MutationObserver(() => {
-    const isDark = getCurrentTheme() === 'dark';
+  // 使用全局主题状态监听器
+  themeUnsubscribe = onThemeChange((newTheme, isDark) => {
     loadHighlightStyle(isDark);
+    // 重新应用内联样式以确保颜色正确
+    nextTick(() => {
+      setTimeout(() => {
+        applyInlineStyles();
+      }, 100);
+    });
+  });
+  
+  // 同时保留 DOM 监听作为备用
+  const observer = new MutationObserver(() => {
+    const isDark = document.documentElement.classList.contains('dark-theme');
+    if (isDark !== globalThemeState.isDark) {
+      // 如果 DOM 状态与全局状态不一致，同步全局状态
+      globalThemeState.isDark = isDark;
+      globalThemeState.currentTheme = isDark ? 'dark' : 'light';
+    }
   });
   
   observer.observe(document.documentElement, {
@@ -77,18 +102,33 @@ marked.setOptions({
   headerIds: true,
   mangle: false,
   highlight: function(code, lang) {
-    if (lang && hljs.getLanguage(lang)) {
+    // 如果没有语言标识，使用纯文本
+    if (!lang || lang === '') {
+      // 使用 highlight 自动检测
       try {
-        return hljs.highlight(code, { language: lang }).value;
+        const result = hljs.highlightAuto(code);
+        return result.value;
       } catch (err) {
-        console.warn('代码高亮失败:', err);
+        return `<code class="hljs">${code}</code>`;
       }
     }
-    // 如果没有指定语言或语言不支持，尝试自动检测
+
+    // 检查语言是否支持
+    if (hljs.getLanguage(lang)) {
+      try {
+        const result = hljs.highlight(code, { language: lang });
+        return result.value;
+      } catch (err) {
+        console.warn(`代码高亮失败 (${lang}):`, err);
+      }
+    }
+
+    // 如果高亮失败，尝试自动检测
     try {
-      return hljs.highlightAuto(code).value;
+      const result = hljs.highlightAuto(code);
+      return result.value;
     } catch (err) {
-      return code;
+      return `<code class="hljs">${code}</code>`;
     }
   },
 });
@@ -107,6 +147,140 @@ const renderMarkdown = (content) => {
     addHeadingIds();
     generateTOC();
     setupScrollListener();
+
+    // 额外延迟，确保高亮样式完全应用
+    setTimeout(() => {
+      applyInlineStyles();
+    }, 100);
+  });
+};
+
+// 应用内联样式增强高亮效果（使用 CSS 变量）
+const applyInlineStyles = () => {
+  if (!contentRef.value) return;
+
+  // 获取所有代码块，包括没有 hljs 类的
+  const codeElements = contentRef.value.querySelectorAll('pre code');
+  const isDark = globalThemeState.isDark;
+
+  // 从 CSS 变量获取颜色，确保与主题一致
+  const root = document.documentElement;
+  const getCSSVar = (varName) => {
+    return getComputedStyle(root).getPropertyValue(varName).trim();
+  };
+
+  // 根据主题选择颜色方案（使用 CSS 变量）
+  const colors = isDark ? {
+    keyword: getCSSVar('--hl-keyword') || '#ff7b72',
+    string: getCSSVar('--hl-string') || '#a5d6ff',
+    number: getCSSVar('--hl-number') || '#79c0ff',
+    comment: getCSSVar('--hl-comment') || '#8b949e',
+    function: getCSSVar('--hl-function') || '#d2a8ff',
+    operator: getCSSVar('--hl-operator') || '#ff7b72',
+    className: getCSSVar('--hl-class') || '#ff7b72',
+    tag: getCSSVar('--hl-tag') || '#7ee787',
+    attribute: getCSSVar('--hl-attribute') || '#79c0ff',
+    property: getCSSVar('--hl-property') || '#79c0ff',
+    punctuation: getCSSVar('--hl-punctuation') || '#c9d1d9',
+    variable: getCSSVar('--hl-variable') || '#ffa657'
+  } : {
+    keyword: getCSSVar('--hl-keyword') || '#d73a49',
+    string: getCSSVar('--hl-string') || '#032f62',
+    number: getCSSVar('--hl-number') || '#005cc5',
+    comment: getCSSVar('--hl-comment') || '#6a737d',
+    function: getCSSVar('--hl-function') || '#6f42c1',
+    operator: getCSSVar('--hl-operator') || '#d73a49',
+    className: getCSSVar('--hl-class') || '#d73a49',
+    tag: getCSSVar('--hl-tag') || '#22863a',
+    attribute: getCSSVar('--hl-attribute') || '#6f42c1',
+    property: getCSSVar('--hl-property') || '#005cc5',
+    punctuation: getCSSVar('--hl-punctuation') || '#24292e',
+    variable: getCSSVar('--hl-variable') || '#e36209'
+  };
+
+  codeElements.forEach((code) => {
+    // 确保 code 元素有 hljs 类
+    if (!code.classList.contains('hljs')) {
+      code.classList.add('hljs');
+    }
+
+    const spans = code.querySelectorAll('span[class*="hljs-"]');
+    spans.forEach(span => {
+      // 只对没有内联样式的元素添加
+      if (!span.style.color) {
+        const className = span.className;
+
+        // 使用具体的颜色值而不是 CSS 变量
+        if (className.includes('hljs-keyword') || className.includes('hljs-selector-tag')) {
+          span.style.color = colors.keyword;
+          span.style.fontWeight = 'bold';
+        } else if (className.includes('hljs-string')) {
+          span.style.color = colors.string;
+        } else if (className.includes('hljs-number')) {
+          span.style.color = colors.number;
+        } else if (className.includes('hljs-comment')) {
+          span.style.color = colors.comment;
+          span.style.fontStyle = 'italic';
+        } else if (className.includes('hljs-function')) {
+          span.style.color = colors.function;
+        } else if (className.includes('hljs-title')) {
+          span.style.color = colors.function;
+          span.style.fontWeight = 'bold';
+        } else if (className.includes('hljs-class')) {
+          span.style.color = colors.className;
+          span.style.fontWeight = 'bold';
+        } else if (className.includes('hljs-tag')) {
+          span.style.color = colors.tag;
+        } else if (className.includes('hljs-attribute')) {
+          span.style.color = colors.attribute;
+        } else if (className.includes('hljs-property')) {
+          span.style.color = colors.property;
+        } else if (className.includes('hljs-operator')) {
+          span.style.color = colors.operator;
+        } else if (className.includes('hljs-punctuation')) {
+          span.style.color = colors.punctuation;
+        } else if (className.includes('hljs-variable')) {
+          span.style.color = colors.variable;
+        } else if (className.includes('hljs-literal')) {
+          span.style.color = colors.number;
+        } else if (className.includes('hljs-built_in')) {
+          span.style.color = colors.function;
+        } else if (className.includes('hljs-meta')) {
+          span.style.color = colors.tag;
+        } else if (className.includes('hljs-selector-pseudo')) {
+          span.style.color = colors.keyword;
+        } else if (className.includes('hljs-regexp')) {
+          span.style.color = colors.function;
+        } else if (className.includes('hljs-link')) {
+          span.style.color = colors.function;
+          span.style.textDecoration = 'underline';
+        } else if (className.includes('hljs-subst')) {
+          span.style.color = colors.keyword;
+          span.style.fontWeight = 'bold';
+        } else if (className.includes('hljs-type')) {
+          span.style.color = colors.className;
+          span.style.fontWeight = 'bold';
+        } else if (className.includes('hljs-doctag')) {
+          span.style.color = colors.string;
+        } else if (className.includes('hljs-template-variable')) {
+          span.style.color = colors.number;
+        } else if (className.includes('hljs-variable.language_')) {
+          span.style.color = colors.variable;
+        } else if (className.includes('hljs-tag .hljs-attr')) {
+          span.style.color = colors.number;
+        } else if (className.includes('hljs-addition')) {
+          span.style.color = colors.punctuation;
+        } else if (className.includes('hljs-deletion')) {
+          span.style.color = colors.keyword;
+        } else if (className.includes('hljs-symbol')) {
+          span.style.color = colors.function;
+        } else if (className.includes('hljs-emphasis')) {
+          span.style.fontStyle = 'italic';
+        } else if (className.includes('hljs-strong')) {
+          span.style.fontWeight = 'bold';
+        }
+      }
+    });
   });
 };
 
@@ -118,8 +292,14 @@ const processCodeBlocks = () => {
   codeBlocks.forEach((code) => {
     const pre = code.parentElement;
     if (pre.tagName === 'PRE') {
+      // 如果已经有包装器，跳过
       if (pre.parentElement.classList.contains('code-block-wrapper')) {
         return;
+      }
+
+      // 确保代码有 hljs 类
+      if (!code.classList.contains('hljs')) {
+        code.classList.add('hljs');
       }
 
       const wrapper = document.createElement('div');
@@ -128,7 +308,20 @@ const processCodeBlocks = () => {
       const header = document.createElement('div');
       header.className = 'code-block-header';
 
-      const lang = code.className.replace('language-', '') || 'code';
+      // 获取语言信息
+      let lang = 'plain';
+      const classList = Array.from(code.classList);
+      for (const cls of classList) {
+        if (cls.startsWith('language-')) {
+          lang = cls.replace('language-', '');
+          break;
+        } else if (cls === 'hljs') {
+          // 如果没有明确的语言，尝试从 data-language 属性获取
+          lang = code.getAttribute('data-language') || 'plain';
+        }
+      }
+
+      // 显示语言标签
       const langLabel = document.createElement('span');
       langLabel.textContent = lang;
       header.appendChild(langLabel);
@@ -146,18 +339,47 @@ const processCodeBlocks = () => {
   });
 };
 
+// 降级复制方案：使用 document.execCommand
+const fallbackCopyToClipboard = (text) => {
+  return new Promise((resolve, reject) => {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    textArea.style.top = '-999999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    
+    try {
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      if (successful) {
+        resolve();
+      } else {
+        reject(new Error('execCommand 复制失败'));
+      }
+    } catch (err) {
+      document.body.removeChild(textArea);
+      reject(err);
+    }
+  });
+};
+
 const copyCode = (text, button) => {
-  navigator.clipboard.writeText(text).then(() => {
-    const originalText = button.innerHTML;
+  const originalText = button.innerHTML;
+  
+  // 直接使用降级方案，避免触发权限策略警告
+  // document.execCommand('copy') 在大多数情况下都能正常工作，且不会触发权限策略警告
+  fallbackCopyToClipboard(text).then(() => {
     button.innerHTML = '✅ 已复制';
     button.classList.add('copied');
     setTimeout(() => {
       button.innerHTML = originalText;
       button.classList.remove('copied');
     }, 2000);
-  }).catch((err) => {
-    console.error('复制失败:', err);
-    alert('复制失败，请手动复制');
+  }).catch(() => {
+    alert('复制失败，请手动选择文本复制');
   });
 };
 
@@ -174,7 +396,61 @@ const addHeadingIds = () => {
         .replace(/^-|-$/g, '') || `heading-${index}`;
       heading.id = id;
     }
+
+    // 为每个标题添加 headerlink
+    addHeaderLink(heading);
   });
+};
+
+// 添加 headerlink 功能
+const addHeaderLink = (heading) => {
+  // 如果已经有链接，先移除旧的
+  const existingLink = heading.querySelector('.header-link');
+  if (existingLink) {
+    existingLink.remove();
+  }
+
+  // 保存原始文本（不包含链接）
+  const originalText = Array.from(heading.childNodes)
+    .filter(node => node.nodeType === Node.TEXT_NODE || node.nodeName !== 'A')
+    .map(node => node.textContent)
+    .join('')
+    .trim();
+
+  // 创建链接图标
+  const link = document.createElement('a');
+  link.className = 'header-link';
+  link.href = `#${heading.id}`;
+  link.setAttribute('aria-label', '链接');
+  link.innerHTML = '🔗';
+  // 设置 data-original-text 属性，供目录生成时使用
+  link.setAttribute('data-original-text', originalText);
+
+  // 点击链接时更新目录高亮
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+
+    // 滚动到标题位置
+    heading.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start'
+    });
+
+    // 更新 URL hash
+    window.history.pushState(null, null, `#${heading.id}`);
+
+    // 触发目录更新高亮
+    setTimeout(() => {
+      // 模拟滚动事件以更新目录高亮
+      const contentElement = contentRef.value;
+      if (contentElement) {
+        contentElement.dispatchEvent(new Event('scroll'));
+      }
+    }, 100);
+  });
+
+  // 将链接添加到标题的末尾
+  heading.appendChild(link);
 };
 
 const generateTOC = () => {
@@ -192,8 +468,21 @@ const generateTOC = () => {
 
   headings.forEach((heading, index) => {
     const level = parseInt(heading.tagName.charAt(1));
-    const text = heading.textContent.trim();
     const id = heading.id || `heading-${index}`;
+
+    // 获取标题的原始文本，不包含链接图标
+    let text = heading.textContent.trim();
+    const headerLink = heading.querySelector('.header-link');
+    if (headerLink) {
+      const originalText = headerLink.getAttribute('data-original-text');
+      if (originalText) {
+        text = originalText;
+      } else {
+        // 如果没有保存的原始文本，手动过滤掉链接图标
+        const tempText = heading.textContent.replace(/🔗\s*$/, '').trim();
+        text = tempText;
+      }
+    }
 
     while (stack.length > 0 && stack[stack.length - 1].level >= level) {
       stack.pop();
@@ -241,7 +530,7 @@ onMounted(() => {
   initHighlightStyle();
   // 监听主题变化
   themeObserver = observeThemeChange();
-  
+
   if (props.content) {
     renderMarkdown(props.content);
   }
@@ -251,6 +540,10 @@ onUnmounted(() => {
   // 清理主题监听器
   if (themeObserver) {
     themeObserver.disconnect();
+  }
+  // 取消全局主题监听
+  if (themeUnsubscribe) {
+    themeUnsubscribe();
   }
   // 清理样式链接
   if (styleLink) {
@@ -278,7 +571,7 @@ onUnmounted(() => {
 .markdown-body-wrapper {
   max-width: 900px;
   margin: 0 auto;
-  padding: 32px 48px;
+  padding: 32px 48px 100px 48px; /* 增加底部 padding，避免与统计信息框重叠 */
   min-height: calc(100% + 1px); /* 确保内容高度足够触发滚动条 */
   box-sizing: border-box;
   /* 恢复文本方向为从左到右 */
@@ -457,7 +750,7 @@ onUnmounted(() => {
 :deep(.copy-btn) {
   padding: 4px 12px;
   background: var(--accent-color);
-  color: #ffffff;
+  color: var(--btn-text);
   border: none;
   border-radius: 4px;
   cursor: pointer;
@@ -467,12 +760,12 @@ onUnmounted(() => {
 
 :deep(.copy-btn:hover) {
   background: var(--accent-hover);
-  color: #ffffff;
+  color: var(--btn-text);
 }
 
 :deep(.copy-btn.copied) {
-  background: #52c41a;
-  color: #ffffff;
+  background: var(--btn-success);
+  color: var(--btn-text);
 }
 
 :deep(.code-block-wrapper pre) {
@@ -502,6 +795,265 @@ onUnmounted(() => {
   overflow-x: auto;
   padding: 0;
   background: transparent;
+}
+
+/* 重置代码高亮样式，确保不被其他样式覆盖 */
+.markdown-content :deep(.hljs) {
+  color: var(--text-primary) !important;
+  background: var(--code-bg) !important;
+}
+
+/* Light 模式下的语法高亮 - 使用 CSS 变量 */
+.markdown-content :deep(.hljs-comment),
+.markdown-content :deep(.hljs-quote) {
+  color: var(--hl-comment) !important;
+  font-style: italic;
+}
+
+.markdown-content :deep(.hljs-keyword),
+.markdown-content :deep(.hljs-selector-tag),
+.markdown-content :deep(.hljs-subst) {
+  color: var(--hl-keyword) !important;
+  font-weight: bold;
+}
+
+.markdown-content :deep(.hljs-number),
+.markdown-content :deep(.hljs-literal),
+.markdown-content :deep(.hljs-variable),
+.markdown-content :deep(.hljs-template-variable),
+.markdown-content :deep(.hljs-tag .hljs-attr) {
+  color: var(--hl-number) !important;
+}
+
+.markdown-content :deep(.hljs-string),
+.markdown-content :deep(.hljs-doctag) {
+  color: var(--hl-string) !important;
+}
+
+.markdown-content :deep(.hljs-title),
+.markdown-content :deep(.hljs-section),
+.markdown-content :deep(.hljs-selector-id) {
+  color: var(--hl-function) !important;
+  font-weight: bold;
+}
+
+.markdown-content :deep(.hljs-type),
+.markdown-content :deep(.hljs-class .hljs-title) {
+  color: var(--hl-function) !important;
+}
+
+.markdown-content :deep(.hljs-tag),
+.markdown-content :deep(.hljs-name),
+.markdown-content :deep(.hljs-attribute) {
+  color: var(--hl-tag) !important;
+}
+
+.markdown-content :deep(.hljs-regexp),
+.markdown-content :deep(.hljs-link) {
+  color: var(--hl-variable) !important;
+}
+
+.markdown-content :deep(.hljs-symbol),
+.markdown-content :deep(.hljs-bullet) {
+  color: var(--hl-number) !important;
+}
+
+.markdown-content :deep(.hljs-built_in),
+.markdown-content :deep(.hljs-builtin-name) {
+  color: var(--hl-number) !important;
+}
+
+.markdown-content :deep(.hljs-meta) {
+  color: var(--hl-tag) !important;
+}
+
+.markdown-content :deep(.hljs-deletion) {
+  background: var(--hl-deletion-bg) !important;
+}
+
+.markdown-content :deep(.hljs-addition) {
+  background: var(--hl-addition-bg) !important;
+}
+
+.markdown-content :deep(.hljs-emphasis) {
+  font-style: italic !important;
+}
+
+.markdown-content :deep(.hljs-strong) {
+  font-weight: bold !important;
+}
+
+.markdown-content :deep(.hljs-variable.language_) {
+  color: var(--hl-variable) !important;
+}
+
+/* Dark 模式下的语法高亮 - 使用 CSS 变量 */
+.dark-theme .markdown-content :deep(.hljs-comment),
+.dark-theme .markdown-content :deep(.hljs-quote) {
+  color: var(--hl-comment) !important;
+  font-style: italic;
+}
+
+.dark-theme .markdown-content :deep(.hljs-keyword),
+.dark-theme .markdown-content :deep(.hljs-selector-tag),
+.dark-theme .markdown-content :deep(.hljs-subst) {
+  color: var(--hl-keyword) !important;
+  font-weight: bold;
+}
+
+.dark-theme .markdown-content :deep(.hljs-number),
+.dark-theme .markdown-content :deep(.hljs-literal),
+.dark-theme .markdown-content :deep(.hljs-variable),
+.dark-theme .markdown-content :deep(.hljs-template-variable),
+.dark-theme .markdown-content :deep(.hljs-tag .hljs-attr) {
+  color: var(--hl-number) !important;
+}
+
+.dark-theme .markdown-content :deep(.hljs-string),
+.dark-theme .markdown-content :deep(.hljs-doctag) {
+  color: var(--hl-string) !important;
+}
+
+.dark-theme .markdown-content :deep(.hljs-title),
+.dark-theme .markdown-content :deep(.hljs-section),
+.dark-theme .markdown-content :deep(.hljs-selector-id) {
+  color: var(--hl-function) !important;
+  font-weight: bold;
+}
+
+.dark-theme .markdown-content :deep(.hljs-type),
+.dark-theme .markdown-content :deep(.hljs-class .hljs-title) {
+  color: var(--hl-function) !important;
+}
+
+.dark-theme .markdown-content :deep(.hljs-tag),
+.dark-theme .markdown-content :deep(.hljs-name),
+.dark-theme .markdown-content :deep(.hljs-attribute) {
+  color: var(--hl-tag) !important;
+}
+
+.dark-theme .markdown-content :deep(.hljs-regexp),
+.dark-theme .markdown-content :deep(.hljs-link) {
+  color: var(--hl-function) !important;
+}
+
+.dark-theme .markdown-content :deep(.hljs-symbol),
+.dark-theme .markdown-content :deep(.hljs-bullet) {
+  color: var(--hl-number) !important;
+}
+
+.dark-theme .markdown-content :deep(.hljs-built_in),
+.dark-theme .markdown-content :deep(.hljs-builtin-name) {
+  color: var(--hl-number) !important;
+}
+
+.dark-theme .markdown-content :deep(.hljs-meta) {
+  color: var(--hl-tag) !important;
+}
+
+.dark-theme .markdown-content :deep(.hljs-deletion) {
+  background: var(--hl-deletion-bg) !important;
+}
+
+.dark-theme .markdown-content :deep(.hljs-addition) {
+  background: var(--hl-addition-bg) !important;
+}
+
+.dark-theme .markdown-content :deep(.hljs-variable.language_) {
+  color: var(--hl-variable) !important;
+}
+
+/* 为代码块添加默认高亮样式（使用最高优先级） */
+.markdown-content .markdown-body pre code.hljs,
+.markdown-content pre code.hljs,
+.markdown-content code.hljs {
+  background: var(--code-bg) !important;
+  color: var(--text-primary) !important;
+  padding: 16px !important;
+}
+
+/* Dark 模式下代码块增强样式 - 使用 CSS 变量 */
+.dark-theme .markdown-content pre code.hljs {
+  background: var(--code-block-bg) !important;
+  border: 1px solid var(--code-block-border) !important;
+}
+
+.dark-theme :deep(.code-block-wrapper) {
+  background: var(--code-block-header-bg) !important;
+}
+
+.dark-theme :deep(.code-block-header) {
+  background: var(--code-block-bg) !important;
+  border: 1px solid var(--code-block-border) !important;
+  border-bottom: none !important;
+  color: var(--text-secondary) !important;
+}
+
+.dark-theme :deep(.copy-btn) {
+  background: var(--btn-success) !important;
+  color: var(--btn-text) !important;
+  border: 1px solid var(--btn-success-hover) !important;
+}
+
+.dark-theme :deep(.copy-btn:hover) {
+  background: var(--btn-success-hover) !important;
+  border-color: var(--btn-success-hover) !important;
+}
+
+/* 为不同语言添加特定样式 - 使用 CSS 变量 */
+.markdown-content :deep(.language-javascript .hljs-function),
+.markdown-content :deep(.language-js .hljs-function) {
+  color: var(--hl-function);
+}
+
+.markdown-content :deep(.language-python .hljs-keyword) {
+  color: var(--hl-keyword);
+  font-weight: bold;
+}
+
+/* Header Link 样式 */
+:deep(.header-link) {
+  display: inline-block;
+  margin-left: 8px;
+  color: var(--text-tertiary);
+  text-decoration: none;
+  font-size: 14px;
+  opacity: 0;
+  transition: all 0.2s ease;
+  padding: 2px 4px;
+  line-height: 1;
+  vertical-align: middle;
+  background: var(--bg-primary);
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+}
+
+/* 悬浮在标题上时显示链接 */
+:deep(.markdown-body h1:hover .header-link),
+:deep(.markdown-body h2:hover .header-link),
+:deep(.markdown-body h3:hover .header-link),
+:deep(.markdown-body h4:hover .header-link),
+:deep(.markdown-body h5:hover .header-link),
+:deep(.markdown-body h6:hover .header-link) {
+  opacity: 0.7;
+}
+
+:deep(.header-link:hover) {
+  opacity: 1 !important;
+  color: var(--accent-color);
+  background: var(--bg-secondary);
+  border-color: var(--accent-color);
+  transform: scale(1.1);
+}
+
+/* 暗色主题下的样式调整 */
+.dark-theme :deep(.header-link) {
+  background: var(--bg-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.dark-theme :deep(.header-link:hover) {
+  background: var(--bg-secondary);
 }
 </style>
 

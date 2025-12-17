@@ -1,5 +1,59 @@
 export function useExport() {
-  const exportToHTML = (file, tocItems = [], currentTheme = 'light') => {
+  // 将图标转换为 base64（用于导出的 HTML）
+  const getIconAsBase64 = async (iconName) => {
+    try {
+      // 尝试从扩展资源获取
+      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
+        const iconUrl = chrome.runtime.getURL(iconName);
+        const response = await fetch(iconUrl);
+        const blob = await response.blob();
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(blob);
+        });
+      }
+      // 如果不在扩展环境中，尝试从当前页面获取
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            resolve(canvas.toDataURL('image/png'));
+          } catch (e) {
+            resolve('');
+          }
+        };
+        
+        img.onerror = () => {
+          resolve('');
+        };
+        
+        // 尝试多个可能的路径
+        const paths = [`/${iconName}`, `./${iconName}`, iconName];
+        let currentPathIndex = 0;
+        const tryNextPath = () => {
+          if (currentPathIndex >= paths.length) {
+            resolve('');
+            return;
+          }
+          img.src = paths[currentPathIndex];
+          currentPathIndex++;
+        };
+        tryNextPath();
+      });
+    } catch (e) {
+      return '';
+    }
+  };
+
+  const exportToHTML = async (file, tocItems = [], currentTheme = 'light') => {
     if (!file) {
       return;
     }
@@ -9,25 +63,116 @@ export function useExport() {
       alert('无法获取内容');
       return;
     }
+    
+    // 获取图标 base64
+    const iconBase64 = await getIconAsBase64('icon16.png');
+    const faviconLink = iconBase64 ? `<link rel="icon" type="image/png" href="${iconBase64}">` : '';
 
-    const content = contentElement.innerHTML;
+    // 克隆内容以避免修改原始 DOM
+    const contentClone = contentElement.cloneNode(true);
+
+    // 处理代码块，添加语言标签和复制按钮
+    const codeBlocks = contentClone.querySelectorAll('pre code');
+    codeBlocks.forEach((code) => {
+      const pre = code.parentElement;
+      if (pre.tagName === 'PRE') {
+        // 如果已经有包装器，跳过
+        if (pre.parentElement.classList.contains('code-block-wrapper')) {
+          return;
+        }
+
+        // 获取语言信息
+        let lang = 'plain';
+        const classList = Array.from(code.classList);
+        for (const cls of classList) {
+          if (cls.startsWith('language-')) {
+            lang = cls.replace('language-', '');
+            break;
+          } else if (cls === 'hljs') {
+            // 如果没有明确的语言，尝试从 data-language 属性获取
+            lang = code.getAttribute('data-language') || 'plain';
+          }
+        }
+
+        // 创建包装器
+        const wrapper = document.createElement('div');
+        wrapper.className = 'code-block-wrapper';
+
+        // 创建头部
+        const header = document.createElement('div');
+        header.className = 'code-block-header';
+
+        // 语言标签
+        const langLabel = document.createElement('span');
+        langLabel.textContent = lang;
+        header.appendChild(langLabel);
+
+        // 复制按钮（注意：这个按钮的事件监听器不会在导出的 HTML 中使用）
+        // 导出的 HTML 使用 script 标签中的 copyToClipboard 函数
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'copy-btn';
+        copyBtn.innerHTML = '📋 复制';
+        // 这个事件监听器只是为了在导出前预览时使用，实际导出的 HTML 会使用 script 中的函数
+        // 使用降级方案，避免权限策略警告
+        copyBtn.addEventListener('click', () => {
+          const textArea = document.createElement('textarea');
+          textArea.value = code.textContent;
+          textArea.style.position = 'fixed';
+          textArea.style.left = '-999999px';
+          textArea.style.top = '-999999px';
+          document.body.appendChild(textArea);
+          textArea.focus();
+          textArea.select();
+          
+          try {
+            const successful = document.execCommand('copy');
+            document.body.removeChild(textArea);
+            if (successful) {
+              const originalText = copyBtn.innerHTML;
+              copyBtn.innerHTML = '✅ 已复制';
+              copyBtn.classList.add('copied');
+              setTimeout(() => {
+                copyBtn.innerHTML = originalText;
+                copyBtn.classList.remove('copied');
+              }, 2000);
+            } else {
+              alert('复制失败，请手动选择文本复制');
+            }
+          } catch (err) {
+            document.body.removeChild(textArea);
+            alert('复制失败，请手动选择文本复制');
+          }
+        });
+        header.appendChild(copyBtn);
+
+        // 包装结构
+        pre.parentNode.insertBefore(wrapper, pre);
+        wrapper.appendChild(header);
+        wrapper.appendChild(pre);
+      }
+    });
+
+    const content = contentClone.innerHTML;
     
     // 生成目录 HTML（与预览效果一致）
     const generateTocHTML = (items) => {
       if (items.length === 0) return '';
       
       const renderTocItems = (items, level = 0) => {
-        return items.map(item => {
+        return items.map((item, index) => {
+          // Ant Design Anchor 的缩进方式：第一级 0px，第二级 16px，第三级 32px
           const indent = level * 16;
           const children = item.children && item.children.length > 0 
             ? renderTocItems(item.children, level + 1) 
             : '';
+          // 第一项不需要上边距，其他项需要
+          const marginTop = (level === 0 && index === 0) ? '0' : (level === 0 ? '1px' : '2px');
           return `
-            <li style="margin: 4px 0; padding-left: ${indent}px;">
+            <li class="toc-item" style="padding-left: ${indent}px; margin-top: ${marginTop};">
               <a href="#${item.id}" class="toc-link" data-href="#${item.id}">
                 ${escapeHtml(item.text)}
               </a>
-              ${children ? `<ul style="list-style: none; padding: 0; margin: 0;">${children}</ul>` : ''}
+              ${children ? `<ul class="toc-sublist">${children}</ul>` : ''}
             </li>
           `;
         }).join('');
@@ -87,6 +232,11 @@ export function useExport() {
 
     // 根据当前主题生成样式
     const isDark = currentTheme === 'dark';
+    
+    // 获取 highlight.js 的 CDN 样式
+    const highlightStyles = isDark
+      ? `<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">`
+      : `<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">`;
     const themeVars = isDark ? `
       --bg-primary: #141414;
       --bg-secondary: #1f1f1f;
@@ -97,13 +247,26 @@ export function useExport() {
       --text-tertiary: rgba(255, 255, 255, 0.45);
       --accent-color: #177ddc;
       --accent-hover: #3c9fe8;
-      --code-bg: #1f1f1f;
-      --code-border: #434343;
-      --code-text: #ff7eb6;
+      --code-bg: #0d1117;
+      --code-border: #30363d;
+      --code-text: #ff7b72;
       --blockquote-bg: #1f1f1f;
       --blockquote-border: #177ddc;
       --table-header-bg: #1f1f1f;
       --table-row-bg: #1f1f1f;
+      /* 语法高亮颜色 - GitHub Dark */
+      --hl-keyword: #ff7b72;
+      --hl-string: #a5d6ff;
+      --hl-number: #79c0ff;
+      --hl-comment: #8b949e;
+      --hl-function: #d2a8ff;
+      --hl-operator: #ff7b72;
+      --hl-class: #ff7b72;
+      --hl-tag: #7ee787;
+      --hl-attribute: #79c0ff;
+      --hl-property: #79c0ff;
+      --hl-punctuation: #c9d1d9;
+      --hl-variable: #ffa657;
     ` : `
       --bg-primary: #ffffff;
       --bg-secondary: #f8f9fa;
@@ -114,13 +277,26 @@ export function useExport() {
       --text-tertiary: #adb5bd;
       --accent-color: #1890ff;
       --accent-hover: #40a9ff;
-      --code-bg: #f5f5f5;
-      --code-border: #e8e8e8;
-      --code-text: #e83e8c;
+      --code-bg: #f6f8fa;
+      --code-border: #d0d7de;
+      --code-text: #d73a49;
       --blockquote-bg: #fafafa;
       --blockquote-border: #1890ff;
       --table-header-bg: #fafafa;
       --table-row-bg: #fafafa;
+      /* 语法高亮颜色 - GitHub */
+      --hl-keyword: #d73a49;
+      --hl-string: #032f62;
+      --hl-number: #005cc5;
+      --hl-comment: #6a737d;
+      --hl-function: #6f42c1;
+      --hl-operator: #d73a49;
+      --hl-class: #d73a49;
+      --hl-tag: #22863a;
+      --hl-attribute: #6f42c1;
+      --hl-property: #005cc5;
+      --hl-punctuation: #24292e;
+      --hl-variable: #e36209;
     `;
 
     // Markdown 内容专用样式（确保完整，与预览效果一致）
@@ -132,7 +308,6 @@ export function useExport() {
 
 /* 布局样式 - 与预览效果一致 */
 body {
-  display: flex;
   margin: 0;
   padding: 0;
   height: 100vh;
@@ -143,26 +318,75 @@ body {
   transition: background-color 0.3s, color 0.3s;
 }
 
-/* 目录侧边栏样式 - 右侧固定，与预览效果一致 */
-.toc-sidebar {
-  width: 280px;
-  background: var(--bg-primary);
-  border-left: 1px solid var(--border-color);
+/* 主容器 - 使用与预览相同的布局 */
+.main-container {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* 内容区域 */
+.content-area {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  position: fixed;
-  right: 0;
-  top: 0;
-  z-index: 100;
+  background: var(--bg-primary);
+  transition: background-color 0.3s;
+  overflow: hidden;
+}
+
+/* 内容头部 */
+.content-header {
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
+  height: 48px;
   transition: background-color 0.3s, border-color 0.3s;
 }
 
+.breadcrumb {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  transition: color 0.3s;
+}
+
+/* Markdown 内容包装器 */
+.markdown-content-wrapper {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+/* 目录侧边栏样式 - 左侧固定，与预览效果一致 */
+.toc-sidebar {
+  width: 280px;
+  background: var(--bg-primary);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  position: relative;
+  z-index: 100;
+  transition: background-color 0.3s, border-color 0.3s;
+  overflow: hidden; /* 确保容器不会溢出 */
+  min-height: 0; /* 允许 flex 容器缩小 */
+  flex-shrink: 0;
+}
+
 .toc-header {
-  padding: 12px 16px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-primary);
   transition: background-color 0.3s, border-color 0.3s;
+  flex-shrink: 0;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
 }
 
 .toc-header h3 {
@@ -171,15 +395,65 @@ body {
   font-weight: 600;
   color: var(--text-primary);
   transition: color 0.3s;
+  text-align: center;
 }
 
 .toc-content {
-  flex: 1;
+  flex: 1 1 auto;
   overflow-y: auto;
-  padding: 16px;
+  overflow-x: hidden;
+  padding: 8px;
+  min-height: 0; /* 重要：允许 flex 子元素缩小，这样才能正确滚动 */
+  position: relative;
+  /* 滚动条样式 */
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-tertiary) var(--bg-secondary);
+  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box; /* 确保 padding 包含在高度计算内 */
+  /* 确保内容区域可以正确计算高度 */
+  height: 0; /* 配合 flex: 1 使用，强制 flex 子元素遵守高度限制 */
+}
+
+/* 目录侧边栏滚动条样式 */
+.toc-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.toc-content::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+  border-radius: 4px;
+}
+
+.toc-content::-webkit-scrollbar-thumb {
+  background: var(--text-tertiary);
+  border-radius: 4px;
+  min-height: 20px;
+}
+
+.toc-content::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
 }
 
 .toc-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  height: auto; /* 允许列表根据内容自动调整高度 */
+  min-height: 0; /* 允许缩小 */
+}
+
+.toc-item {
+  position: relative;
+  padding: 0;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.toc-item:first-child {
+  margin-top: 0;
+}
+
+.toc-sublist {
   list-style: none;
   padding: 0;
   margin: 0;
@@ -190,8 +464,10 @@ body {
   text-decoration: none;
   font-size: 13px;
   display: block;
-  padding: 4px 0;
+  padding: 1px 0;
+  line-height: 1.5;
   transition: color 0.2s;
+  position: relative;
 }
 
 .toc-link:hover {
@@ -205,13 +481,49 @@ body {
 
 /* Markdown 内容样式 - 与预览效果完全一致 */
 .markdown-content {
-  padding: 32px 48px;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  width: 100%;
+  padding: 0;
+  /* 使用 RTL 方向让滚动条在右侧 */
+  direction: rtl;
+  /* 确保滚动条可见 */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) var(--bg-secondary);
+}
+
+/* 内容区域居中显示，但滚动条在页面最右侧 */
+.markdown-body-wrapper {
   max-width: 900px;
   margin: 0 auto;
-  margin-right: 280px;
-  height: 100vh;
-  overflow-y: auto;
-  width: calc(100% - 280px);
+  padding: 32px 48px 100px 48px; /* 增加底部 padding，避免与统计信息框重叠 */
+  min-height: calc(100% + 1px); /* 确保内容高度足够触发滚动条 */
+  box-sizing: border-box;
+  /* 恢复文本方向为从左到右 */
+  direction: ltr;
+  /* 确保内容可以正常显示 */
+  text-align: left;
+  /* 确保内容不会因为 RTL 而反向 */
+  unicode-bidi: embed;
+}
+
+/* 自定义滚动条样式，确保在右侧可见 */
+.markdown-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.markdown-content::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+.markdown-content::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+.markdown-content::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
 }
 
 .markdown-body {
@@ -291,7 +603,6 @@ body {
   width: 100%;
   border-collapse: collapse;
   margin: 16px 0;
-  font-size: 14px;
 }
 
 .markdown-body table th,
@@ -373,12 +684,12 @@ body {
 .copy-btn {
   padding: 4px 12px;
   background: var(--accent-color);
-  color: white;
+  color: #ffffff;
   border: none;
   border-radius: 4px;
   cursor: pointer;
   font-size: 12px;
-  transition: background 0.2s;
+  transition: background 0.2s, color 0.2s;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -386,10 +697,12 @@ body {
 
 .copy-btn:hover {
   background: var(--accent-hover);
+  color: #ffffff;
 }
 
 .copy-btn.copied {
   background: #52c41a;
+  color: #ffffff;
 }
 
 .code-block-wrapper pre {
@@ -413,6 +726,207 @@ body {
   font-size: inherit;
   color: inherit;
 }
+
+/* 确保代码高亮样式正确应用 */
+pre code.hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 0;
+  background: transparent;
+}
+
+/* 代码语法高亮样式 - 使用 CSS 变量适配主题 */
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-subst {
+  color: var(--hl-keyword);
+  font-weight: bold;
+}
+
+.hljs-number,
+.hljs-literal,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag .hljs-attr {
+  color: var(--hl-number);
+}
+
+.hljs-string,
+.hljs-doctag {
+  color: var(--hl-string);
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--hl-comment);
+  font-style: italic;
+}
+
+.hljs-function,
+.hljs-title,
+.hljs-section,
+.hljs-regexp {
+  color: var(--hl-function);
+}
+
+.hljs-operator,
+.hljs-meta,
+.hljs-selector-pseudo {
+  color: var(--hl-operator);
+}
+
+.hljs-class .hljs-title,
+.hljs-type {
+  color: var(--hl-class);
+  font-weight: bold;
+}
+
+.hljs-tag {
+  color: var(--hl-tag);
+}
+
+.hljs-attribute {
+  color: var(--hl-attribute);
+}
+
+.hljs-property {
+  color: var(--hl-property);
+}
+
+.hljs-punctuation,
+.hljs-built_in,
+.hljs-bullet,
+.hljs-code,
+.hljs-addition {
+  color: var(--hl-punctuation);
+}
+
+.hljs-variable.language_ {
+  color: var(--hl-variable);
+}
+
+/* 标题链接样式 */
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  position: relative;
+}
+
+.markdown-body h1:hover .header-link,
+.markdown-body h2:hover .header-link,
+.markdown-body h3:hover .header-link,
+.markdown-body h4:hover .header-link,
+.markdown-body h5:hover .header-link,
+.markdown-body h6:hover .header-link {
+  opacity: 1;
+}
+
+.markdown-body .header-link {
+  opacity: 0;
+  margin-left: 8px;
+  color: var(--text-tertiary);
+  text-decoration: none;
+  font-size: 0.8em;
+  vertical-align: middle;
+  transition: opacity 0.2s, color 0.2s;
+}
+
+.markdown-body .header-link:hover {
+  color: var(--accent-color);
+}
+
+/* 悬浮按钮容器 - 垂直排列 */
+.float-buttons {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 目录悬浮按钮 */
+.toc-float-button {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent-color);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.toc-float-button:hover {
+  transform: scale(1.1);
+  background: var(--accent-hover);
+}
+
+/* curl 转 Python 悬浮按钮 */
+.curl-float-button {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent-color);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s, background 0.2s;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.curl-float-button:hover {
+  transform: scale(1.1);
+  background: var(--accent-hover);
+}
+
+.curl-text {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.3px;
+}
+
+/* 回到顶部悬浮按钮 */
+.back-to-top-button {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent-color);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.back-to-top-button:hover {
+  transform: scale(1.1);
+  background: var(--accent-hover);
+}
+
+.back-to-top-icon {
+  font-size: 20px;
+  line-height: 1;
+  font-weight: bold;
+}
 `;
 
     const html = `<!DOCTYPE html>
@@ -421,38 +935,110 @@ body {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(file.name)}</title>
+  ${faviconLink}
+  <!-- Highlight.js 样式 -->
+  ${highlightStyles}
   <style>
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
     }
-    
+
     body {
       margin: 0;
       padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
       background: #fff;
     }
-    
+
     ${allStyles}
     ${markdownStyles}
   </style>
 </head>
 <body>
-  ${tocHTML}
-  <div class="markdown-content">
-    <div class="markdown-body">
-      ${content}
+  <div class="main-container">
+    <!-- 左侧目录侧边栏 -->
+    ${tocHTML}
+    
+    <!-- 中间内容区 -->
+    <div class="content-area">
+      <div class="content-header">
+        <div class="breadcrumb">
+          <span>${escapeHtml(file.name)}</span>
+        </div>
+      </div>
+      <div class="markdown-content-wrapper">
+        <div class="markdown-content">
+          <div class="markdown-body-wrapper">
+            <div class="markdown-body">
+              ${content}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 悬浮按钮组 - 垂直排列 -->
+    <div class="float-buttons">
+      <!-- 目录悬浮按钮 -->
+      <button class="toc-float-button" id="toc-toggle-btn" title="显示/隐藏目录">
+        <span style="font-size: 20px;">☰</span>
+      </button>
+
+      <!-- curl 转 Python 悬浮按钮 -->
+      <button class="curl-float-button" id="curl-to-python-btn" title="curl 转 Python">
+        <span class="curl-text">curl</span>
+      </button>
+
+      <!-- 回到顶部悬浮按钮 -->
+      <button class="back-to-top-button" id="back-to-top-btn" title="回到顶部">
+        <span class="back-to-top-icon">↑</span>
+      </button>
     </div>
   </div>
   <script>
-    // 代码复制功能
+    // 代码复制功能（直接使用降级方案，避免权限策略警告）
+    // document.execCommand('copy') 在大多数情况下都能正常工作，且不会触发权限策略警告
+    function copyToClipboard(text) {
+      return fallbackCopyToClipboard(text);
+    }
+    
+    // 降级复制方案：使用 document.execCommand
+    function fallbackCopyToClipboard(text) {
+      return new Promise((resolve, reject) => {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        try {
+          const successful = document.execCommand('copy');
+          document.body.removeChild(textArea);
+          if (successful) {
+            resolve();
+          } else {
+            reject(new Error('execCommand 复制失败'));
+          }
+        } catch (err) {
+          document.body.removeChild(textArea);
+          reject(err);
+        }
+      });
+    }
+    
+    // 为所有复制按钮绑定事件
     document.querySelectorAll('.copy-btn').forEach(btn => {
       btn.addEventListener('click', function() {
         const code = this.closest('.code-block-wrapper').querySelector('code');
-        navigator.clipboard.writeText(code.textContent).then(() => {
-          const originalText = this.innerHTML;
+        if (!code) return;
+        
+        const originalText = this.innerHTML;
+        copyToClipboard(code.textContent).then(() => {
           this.innerHTML = '✅ 已复制';
           this.classList.add('copied');
           setTimeout(() => {
@@ -461,7 +1047,28 @@ body {
           }, 2000);
         }).catch(err => {
           console.error('复制失败:', err);
-          alert('复制失败，请手动复制');
+          // 如果都失败了，尝试提示用户手动选择复制
+          const textArea = document.createElement('textarea');
+          textArea.value = code.textContent;
+          textArea.style.position = 'fixed';
+          textArea.style.left = '50%';
+          textArea.style.top = '50%';
+          textArea.style.transform = 'translate(-50%, -50%)';
+          textArea.style.opacity = '0';
+          document.body.appendChild(textArea);
+          textArea.select();
+          try {
+            document.execCommand('copy');
+            this.innerHTML = '✅ 已复制';
+            this.classList.add('copied');
+            setTimeout(() => {
+              this.innerHTML = originalText;
+              this.classList.remove('copied');
+            }, 2000);
+          } catch (e) {
+            alert('复制失败，请手动选择文本复制');
+          }
+          document.body.removeChild(textArea);
         });
       });
     });
@@ -473,12 +1080,12 @@ body {
         const id = this.getAttribute('href').substring(1);
         const element = document.getElementById(id);
         if (element) {
-          const markdownContent = document.querySelector('.markdown-content');
-          const containerRect = markdownContent.getBoundingClientRect();
-          const elementRect = element.getBoundingClientRect();
-          const offset = elementRect.top - containerRect.top + markdownContent.scrollTop - 100;
-          
-          markdownContent.scrollTo({
+        const markdownContentForScroll = document.querySelector('.markdown-content');
+        const containerRect = markdownContentForScroll.getBoundingClientRect();
+        const elementRect = element.getBoundingClientRect();
+        const offset = elementRect.top - containerRect.top + markdownContentForScroll.scrollTop - 100;
+        
+        markdownContentForScroll.scrollTo({
             top: offset,
             behavior: 'smooth'
           });
@@ -491,16 +1098,16 @@ body {
     });
     
     // 滚动时高亮目录（与预览效果一致）
-    const markdownContent = document.querySelector('.markdown-content');
-    if (markdownContent) {
+    const markdownContentForToc = document.querySelector('.markdown-content');
+    if (markdownContentForToc) {
       const updateTocHighlight = () => {
-        const headings = markdownContent.querySelectorAll('h1, h2, h3, h4, h5, h6');
+        const headings = markdownContentForToc.querySelectorAll('h1, h2, h3, h4, h5, h6');
         const links = document.querySelectorAll('.toc-link');
         
         if (headings.length === 0 || links.length === 0) return;
         
         let activeId = null;
-        const containerRect = markdownContent.getBoundingClientRect();
+        const containerRect = markdownContentForToc.getBoundingClientRect();
         const offset = 100;
         
         // 从下往上找第一个进入视口的标题
@@ -525,11 +1132,62 @@ body {
         });
       };
       
-      markdownContent.addEventListener('scroll', updateTocHighlight, { passive: true });
+      markdownContentForToc.addEventListener('scroll', updateTocHighlight, { passive: true });
       updateTocHighlight(); // 初始触发
       
       // 延迟触发一次，确保 DOM 完全渲染
       setTimeout(updateTocHighlight, 100);
+    }
+    
+    // 目录切换功能
+    const tocToggleBtn = document.getElementById('toc-toggle-btn');
+    const tocSidebar = document.querySelector('.toc-sidebar');
+    if (tocToggleBtn && tocSidebar) {
+      let tocVisible = true;
+      tocToggleBtn.addEventListener('click', function() {
+        tocVisible = !tocVisible;
+        if (tocVisible) {
+          tocSidebar.style.display = 'flex';
+        } else {
+          tocSidebar.style.display = 'none';
+        }
+      });
+    }
+    
+    // curl 转 Python 功能
+    const curlToPythonBtn = document.getElementById('curl-to-python-btn');
+    if (curlToPythonBtn) {
+      curlToPythonBtn.addEventListener('click', function() {
+        window.open('https://tool.uuhc.top/tools/curl-to-python', '_blank');
+      });
+    }
+    
+    // 回到顶部功能
+    const backToTopBtn = document.getElementById('back-to-top-btn');
+    const markdownContentForBackToTop = document.querySelector('.markdown-content');
+    if (backToTopBtn && markdownContentForBackToTop) {
+      backToTopBtn.addEventListener('click', function() {
+        markdownContentForBackToTop.scrollTo({
+          top: 0,
+          behavior: 'smooth'
+        });
+      });
+      
+      // 滚动时显示/隐藏回到顶部按钮
+      let isScrolling = false;
+      markdownContentForBackToTop.addEventListener('scroll', function() {
+        if (!isScrolling) {
+          window.requestAnimationFrame(function() {
+            if (markdownContentForBackToTop.scrollTop > 300) {
+              backToTopBtn.style.display = 'flex';
+            } else {
+              backToTopBtn.style.display = 'flex'; // 始终显示
+            }
+            isScrolling = false;
+          });
+          isScrolling = true;
+        }
+      });
     }
   </script>
 </body>

@@ -80,3 +80,32 @@ async function handleMarkdownFile(fileUrl, tabId) {
     });
   }
 }
+
+// 监听来自 content script 的消息，用于读取 file:// 文件内容
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'readFile') {
+    console.log('Background: 收到读取文件请求:', request.fileUrl);
+    // 在 background script 中读取文件（有权限）
+    fetch(request.fileUrl)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.text();
+      })
+      .then(content => {
+        console.log('Background: 文件读取成功，内容长度:', content?.length || 0);
+        sendResponse({ success: true, content: content });
+      })
+      .catch(error => {
+        console.error('Background: 读取文件失败:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    
+    // 返回 true 表示异步响应
+    return true;
+  }
+  
+  // 如果消息不匹配，返回 false 表示同步响应（或不响应）
+  return false;
+});

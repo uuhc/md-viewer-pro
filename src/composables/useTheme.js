@@ -1,4 +1,36 @@
-import { ref, watch } from 'vue';
+import { ref, watch, reactive } from 'vue';
+
+// 全局主题状态，可以在任何地方访问
+export const globalThemeState = reactive({
+  theme: 'light', // 'light' | 'dark' | 'auto'
+  currentTheme: 'light', // 实际应用的主题 'light' | 'dark'
+  isDark: false, // 便捷的布尔值，表示是否为暗色模式
+});
+
+// 主题变化事件监听器列表
+const themeChangeListeners = new Set();
+
+// 通知所有监听器主题已变化
+const notifyThemeChange = (newTheme) => {
+  globalThemeState.currentTheme = newTheme;
+  globalThemeState.isDark = newTheme === 'dark';
+  themeChangeListeners.forEach(listener => {
+    try {
+      listener(newTheme, globalThemeState.isDark);
+    } catch (error) {
+      console.error('主题变化监听器执行失败:', error);
+    }
+  });
+};
+
+// 注册主题变化监听器
+export const onThemeChange = (listener) => {
+  themeChangeListeners.add(listener);
+  // 返回取消注册函数
+  return () => {
+    themeChangeListeners.delete(listener);
+  };
+};
 
 export function useTheme() {
   const theme = ref('light'); // 'light' | 'dark' | 'auto'
@@ -17,16 +49,27 @@ export function useTheme() {
       root.classList.add('dark-theme');
       root.classList.remove('light-theme');
       currentTheme.value = 'dark';
+      // 同步到全局状态
+      globalThemeState.currentTheme = 'dark';
+      globalThemeState.isDark = true;
     } else {
       root.classList.add('light-theme');
       root.classList.remove('dark-theme');
       currentTheme.value = 'light';
+      // 同步到全局状态
+      globalThemeState.currentTheme = 'light';
+      globalThemeState.isDark = false;
     }
+
+    // 通知所有监听器
+    notifyThemeChange(currentTheme.value);
   };
 
   // 切换主题
   const setTheme = async (newTheme) => {
     theme.value = newTheme;
+    // 同步到全局状态
+    globalThemeState.theme = newTheme;
 
     if (newTheme === 'auto') {
       const systemTheme = getSystemTheme();
@@ -105,6 +148,11 @@ export function useTheme() {
 
     // 设置系统主题监听
     setupSystemThemeListener();
+
+    // 确保全局状态已初始化
+    globalThemeState.theme = theme.value;
+    globalThemeState.currentTheme = currentTheme.value;
+    globalThemeState.isDark = currentTheme.value === 'dark';
   };
 
   // 监听主题变化，同步到系统主题变化
@@ -125,6 +173,8 @@ export function useTheme() {
     getThemeIcon,
     getThemeTooltip,
     initTheme,
+    // 导出全局状态访问
+    globalThemeState,
   };
 }
 

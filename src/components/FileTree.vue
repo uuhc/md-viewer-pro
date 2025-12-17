@@ -158,9 +158,10 @@ watch(searchQuery, (value) => {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 16px;
+    padding: 0 16px;
     border-bottom: 1px solid var(--border-color);
     transition: border-color 0.3s;
+    height: 48px;
 }
 
 .file-tree-header h3 {

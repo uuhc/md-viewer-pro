@@ -10,13 +10,33 @@
   --text-tertiary: #adb5bd;
   --accent-color: #1890ff;
   --accent-hover: #40a9ff;
-  --code-bg: #f5f5f5;
-  --code-border: #e8e8e8;
-  --code-text: #e83e8c;
+  --code-bg: #f6f8fa;
+  --code-border: #d0d7de;
+  --code-text: #d73a49;
   --blockquote-bg: #fafafa;
   --blockquote-border: #1890ff;
   --table-header-bg: #fafafa;
   --table-row-bg: #fafafa;
+  /* 语法高亮颜色 - GitHub */
+  --hl-keyword: #d73a49;
+  --hl-string: #032f62;
+  --hl-number: #005cc5;
+  --hl-comment: #6a737d;
+  --hl-function: #6f42c1;
+  --hl-operator: #d73a49;
+  --hl-class: #d73a49;
+  --hl-tag: #22863a;
+  --hl-attribute: #6f42c1;
+  --hl-property: #005cc5;
+  --hl-punctuation: #24292e;
+  --hl-variable: #e36209;
+  /* 代码高亮背景色 */
+  --hl-deletion-bg: #ffeef0;
+  --hl-addition-bg: #f0fff4;
+  /* 按钮颜色 */
+  --btn-text: #ffffff;
+  --btn-success: #52c41a;
+  --btn-success-hover: #73d13d;
 }
 
 /* 暗色主题 */
@@ -30,13 +50,37 @@
   --text-tertiary: rgba(255, 255, 255, 0.45);
   --accent-color: #177ddc;
   --accent-hover: #3c9fe8;
-  --code-bg: #1f1f1f;
-  --code-border: #434343;
-  --code-text: #ff7eb6;
+  --code-bg: #0d1117;
+  --code-border: #30363d;
+  --code-text: #ff7b72;
   --blockquote-bg: #1f1f1f;
   --blockquote-border: #177ddc;
   --table-header-bg: #1f1f1f;
   --table-row-bg: #1f1f1f;
+  /* 语法高亮颜色 - GitHub Dark */
+  --hl-keyword: #ff7b72;
+  --hl-string: #a5d6ff;
+  --hl-number: #79c0ff;
+  --hl-comment: #8b949e;
+  --hl-function: #d2a8ff;
+  --hl-operator: #ff7b72;
+  --hl-class: #ff7b72;
+  --hl-tag: #7ee787;
+  --hl-attribute: #79c0ff;
+  --hl-property: #79c0ff;
+  --hl-punctuation: #c9d1d9;
+  --hl-variable: #ffa657;
+  /* 代码高亮背景色 */
+  --hl-deletion-bg: #85181e;
+  --hl-addition-bg: #144020;
+  /* 按钮颜色 */
+  --btn-text: #ffffff;
+  --btn-success: #238636;
+  --btn-success-hover: #2ea043;
+  /* 代码块特殊背景 */
+  --code-block-bg: #0d1117;
+  --code-block-border: #30363d;
+  --code-block-header-bg: #161b22;
 }
 
 /* 应用主题变量 */
