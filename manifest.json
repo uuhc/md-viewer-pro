@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Markdown Viewer",
+  "name": "Markdown File Viewer",
   "version": "1.0.0",
-  "description": "美观的 Markdown 文件预览工具，支持文件树、目录导航和 HTML 导出",
+  "description": "Professional Markdown file viewer for Chrome. Auto-preview local MD files with beautiful UI, file tree management, table of contents navigation, code syntax highlighting, and HTML export. Supports dark/light themes.",
   "permissions": [
     "storage",
     "tabs"
@@ -21,7 +21,7 @@
     }
   ],
   "action": {
-    "default_title": "Markdown Viewer"
+    "default_title": "Markdown File Viewer"
   },
   "icons": {
     "16": "icon16.png",
