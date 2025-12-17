@@ -1,0 +1,159 @@
+/* 亮色主题（默认） */
+:root,
+.light-theme {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fa;
+  --bg-tertiary: #f1f3f5;
+  --border-color: #e9ecef;
+  --text-primary: #212529;
+  --text-secondary: #6c757d;
+  --text-tertiary: #adb5bd;
+  --accent-color: #1890ff;
+  --accent-hover: #40a9ff;
+  --code-bg: #f5f5f5;
+  --code-border: #e8e8e8;
+  --code-text: #e83e8c;
+  --blockquote-bg: #fafafa;
+  --blockquote-border: #1890ff;
+  --table-header-bg: #fafafa;
+  --table-row-bg: #fafafa;
+}
+
+/* 暗色主题 */
+.dark-theme {
+  --bg-primary: #141414;
+  --bg-secondary: #1f1f1f;
+  --bg-tertiary: #262626;
+  --border-color: #434343;
+  --text-primary: rgba(255, 255, 255, 0.85);
+  --text-secondary: rgba(255, 255, 255, 0.65);
+  --text-tertiary: rgba(255, 255, 255, 0.45);
+  --accent-color: #177ddc;
+  --accent-hover: #3c9fe8;
+  --code-bg: #1f1f1f;
+  --code-border: #434343;
+  --code-text: #ff7eb6;
+  --blockquote-bg: #1f1f1f;
+  --blockquote-border: #177ddc;
+  --table-header-bg: #1f1f1f;
+  --table-row-bg: #1f1f1f;
+}
+
+/* 应用主题变量 */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.3s, color 0.3s;
+}
+
+/* 确保 Ant Design 组件在 dark 主题下正确显示 */
+.dark-theme :deep(.ant-layout),
+.dark-theme :deep(.ant-layout-sider),
+.dark-theme :deep(.ant-layout-header),
+.dark-theme :deep(.ant-layout-content) {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.dark-theme :deep(.ant-input) {
+  background: var(--bg-primary);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.dark-theme :deep(.ant-input::placeholder) {
+  color: var(--text-tertiary);
+}
+
+.dark-theme :deep(.ant-input:focus),
+.dark-theme :deep(.ant-input-focused) {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(23, 125, 220, 0.2);
+}
+
+.dark-theme :deep(.ant-tree) {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.dark-theme :deep(.ant-tree-node-content-wrapper) {
+  color: var(--text-primary);
+}
+
+.dark-theme :deep(.ant-tree-node-content-wrapper:hover) {
+  background-color: var(--bg-tertiary);
+}
+
+.dark-theme :deep(.ant-tree-node-selected .ant-tree-node-content-wrapper) {
+  background-color: var(--bg-tertiary);
+  color: var(--accent-color);
+}
+
+.dark-theme :deep(.ant-btn-text) {
+  color: var(--text-primary);
+}
+
+.dark-theme :deep(.ant-btn-text:hover) {
+  background-color: var(--bg-tertiary);
+  color: var(--accent-color);
+}
+
+.dark-theme :deep(.ant-empty-description) {
+  color: var(--text-secondary);
+}
+
+/* 确保 tooltip 在两种主题下都可见 */
+.dark-theme .ant-tooltip-inner {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.dark-theme .ant-tooltip-arrow::before {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+}
+
+.light-theme .ant-tooltip-inner {
+  background: #262626;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.light-theme .ant-tooltip-arrow::before {
+  background: #262626;
+}
+
+/* Anchor 组件在暗色主题下的样式 */
+.dark-theme :deep(.ant-anchor) {
+  background: transparent;
+}
+
+.dark-theme :deep(.ant-anchor-link-title) {
+  color: var(--text-secondary);
+}
+
+.dark-theme :deep(.ant-anchor-link-title:hover) {
+  color: var(--accent-color);
+}
+
+.dark-theme :deep(.ant-anchor-link-active > .ant-anchor-link-title) {
+  color: var(--accent-color);
+}
+
+.dark-theme :deep(.ant-anchor-ink::before) {
+  background-color: var(--border-color);
+}
+
+.dark-theme :deep(.ant-anchor-ink-ball) {
+  background-color: var(--accent-color);
+  border-color: var(--accent-color);
+}
+

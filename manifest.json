@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "Markdown Viewer",
+  "version": "1.0.0",
+  "description": "美观的 Markdown 文件预览工具，支持文件树、目录导航和 HTML 导出",
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "file:///*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["file:///*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Markdown Viewer"
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["viewer.html", "viewer.js", "assets/*"],
+      "matches": ["file:///*"]
+    }
+  ]
+}
