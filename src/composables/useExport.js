@@ -495,7 +495,7 @@ body {
 
 /* 内容区域居中显示，但滚动条在页面最右侧 */
 .markdown-body-wrapper {
-  max-width: 900px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 32px 48px 100px 48px; /* 增加底部 padding，避免与统计信息框重叠 */
   min-height: calc(100% + 1px); /* 确保内容高度足够触发滚动条 */
@@ -927,6 +927,103 @@ pre code.hljs {
   line-height: 1;
   font-weight: bold;
 }
+
+/* 导出 HTML 悬浮按钮 */
+.export-float-button {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent-color);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s, background 0.2s;
+  position: relative;
+}
+
+.export-float-button:hover {
+  transform: scale(1.1);
+  background: var(--accent-hover);
+}
+
+.export-icon-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+}
+
+.export-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.export-text {
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.3px;
+}
+
+/* Tooltip 样式 */
+.tooltip {
+  position: absolute;
+  z-index: 1002;
+  padding: 6px 12px;
+  background: #262626;
+  color: rgba(255, 255, 255, 0.85);
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.tooltip::before {
+  content: '';
+  position: absolute;
+  width: 0;
+  height: 0;
+  border: 5px solid transparent;
+}
+
+.tooltip.show {
+  opacity: 1;
+}
+
+/* Tooltip 位置 - 左侧 */
+.tooltip.left {
+  right: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.tooltip.left::before {
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border-left-color: #262626;
+}
+
+/* 暗色主题下的 tooltip */
+.dark-theme .tooltip {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.dark-theme .tooltip.left::before {
+  border-left-color: var(--bg-tertiary);
+}
 `;
 
     const html = `<!DOCTYPE html>
@@ -982,18 +1079,21 @@ pre code.hljs {
     <!-- 悬浮按钮组 - 垂直排列 -->
     <div class="float-buttons">
       <!-- 目录悬浮按钮 -->
-      <button class="toc-float-button" id="toc-toggle-btn" title="显示/隐藏目录">
+      <button class="toc-float-button" id="toc-toggle-btn" data-tooltip="显示/隐藏目录">
         <span style="font-size: 20px;">☰</span>
+        <span class="tooltip left">显示/隐藏目录</span>
       </button>
 
       <!-- curl 转 Python 悬浮按钮 -->
-      <button class="curl-float-button" id="curl-to-python-btn" title="curl 转 Python">
+      <button class="curl-float-button" id="curl-to-python-btn" data-tooltip="curl 转 Python">
         <span class="curl-text">curl</span>
+        <span class="tooltip left">curl 转 Python</span>
       </button>
 
       <!-- 回到顶部悬浮按钮 -->
-      <button class="back-to-top-button" id="back-to-top-btn" title="回到顶部">
+      <button class="back-to-top-button" id="back-to-top-btn" data-tooltip="回到顶部">
         <span class="back-to-top-icon">↑</span>
+        <span class="tooltip left">回到顶部</span>
       </button>
     </div>
   </div>
@@ -1138,6 +1238,31 @@ pre code.hljs {
       // 延迟触发一次，确保 DOM 完全渲染
       setTimeout(updateTocHighlight, 100);
     }
+    
+    // Tooltip 功能
+    function initTooltips() {
+      const buttons = document.querySelectorAll('[data-tooltip]');
+      buttons.forEach(button => {
+        const tooltip = button.querySelector('.tooltip');
+        if (!tooltip) return;
+        
+        let hideTimeout;
+        
+        button.addEventListener('mouseenter', function() {
+          clearTimeout(hideTimeout);
+          tooltip.classList.add('show');
+        });
+        
+        button.addEventListener('mouseleave', function() {
+          hideTimeout = setTimeout(() => {
+            tooltip.classList.remove('show');
+          }, 100);
+        });
+      });
+    }
+    
+    // 初始化 tooltip
+    initTooltips();
     
     // 目录切换功能
     const tocToggleBtn = document.getElementById('toc-toggle-btn');

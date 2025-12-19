@@ -1,6 +1,6 @@
-# Markdown Viewer 浏览器插件
+# Markdown File Viewer
 
-一个美观的 Markdown 文件预览工具，支持文件树、目录导航和 HTML 导出功能。
+一个专业的 Markdown 文件预览工具，支持文件树、目录导航和 HTML 导出功能。
 
 ## 功能特性
 

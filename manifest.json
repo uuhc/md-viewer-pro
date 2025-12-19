@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Markdown File Viewer",
   "version": "1.0.0",
-  "description": "Professional Markdown file viewer for Chrome. Auto-preview local MD files with beautiful UI, file tree management, table of contents navigation, code syntax highlighting, and HTML export. Supports dark/light themes.",
+  "description": "Auto-preview Markdown files with file tree, TOC navigation, code highlight & HTML export",
   "permissions": [
     "storage",
     "tabs"
@@ -15,8 +15,12 @@
   },
   "content_scripts": [
     {
-      "matches": ["file:///*"],
-      "js": ["content.js"],
+      "matches": [
+        "file:///*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
@@ -33,8 +37,14 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["viewer.html", "viewer.js", "assets/*"],
-      "matches": ["file:///*"]
+      "resources": [
+        "viewer.html",
+        "viewer.js",
+        "assets/*"
+      ],
+      "matches": [
+        "file:///*"
+      ]
     }
   ]
 }

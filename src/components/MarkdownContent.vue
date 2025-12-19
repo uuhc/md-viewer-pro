@@ -569,7 +569,7 @@ onUnmounted(() => {
 
 /* 内容区域居中显示，但滚动条在页面最右侧 */
 .markdown-body-wrapper {
-  max-width: 900px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 32px 48px 100px 48px; /* 增加底部 padding，避免与统计信息框重叠 */
   min-height: calc(100% + 1px); /* 确保内容高度足够触发滚动条 */
