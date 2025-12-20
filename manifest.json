@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Markdown File Viewer",
+  "name": "MD Viewer Pro",
   "version": "1.0.0",
   "description": "Auto-preview Markdown files with file tree, TOC navigation, code highlight & HTML export",
   "permissions": [
@@ -25,7 +25,7 @@
     }
   ],
   "action": {
-    "default_title": "Markdown File Viewer"
+    "default_title": "MD Viewer Pro"
   },
   "icons": {
     "16": "icon16.png",

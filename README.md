@@ -1,4 +1,4 @@
-# Markdown File Viewer
+# MD Viewer Pro
 
 一个专业的 Markdown 文件预览工具，支持文件树、目录导航和 HTML 导出功能。
 
