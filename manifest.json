@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MD Viewer Pro",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Auto-preview Markdown files with file tree, TOC navigation, code highlight & HTML export",
   "permissions": [
     "storage",
