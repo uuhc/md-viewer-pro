@@ -10,6 +10,7 @@
 import { ref, watch, onMounted, nextTick, onUnmounted } from 'vue';
 import { marked } from 'marked';
 import hljs from 'highlight.js';
+import mermaid from 'mermaid';
 import { globalThemeState, onThemeChange } from '../composables/useTheme';
 
 const props = defineProps({
@@ -26,6 +27,41 @@ const renderedContent = ref('');
 let styleLink = null;
 let themeObserver = null;
 let themeUnsubscribe = null;
+let mermaidInitialized = false;
+
+// 初始化 Mermaid
+const initMermaid = (isDark) => {
+  const theme = isDark ? 'dark' : 'default';
+
+  try {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: theme,
+      securityLevel: 'loose',
+      fontFamily: 'inherit',
+    });
+    mermaidInitialized = true;
+  } catch (err) {
+    console.warn('Mermaid 初始化失败:', err);
+  }
+};
+
+// 更新 Mermaid 主题
+const updateMermaidTheme = (isDark) => {
+  const theme = isDark ? 'dark' : 'default';
+  try {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: theme,
+      securityLevel: 'loose',
+      fontFamily: 'inherit',
+    });
+    // 重新渲染所有 Mermaid 图表
+    renderAllMermaidDiagrams();
+  } catch (err) {
+    console.warn('Mermaid 主题更新失败:', err);
+  }
+};
 
 // 根据主题加载对应的 highlight.js 样式
 const loadHighlightStyle = (isDark) => {
@@ -53,11 +89,6 @@ const loadHighlightStyle = (isDark) => {
   document.head.appendChild(styleLink);
 };
 
-// 检测当前主题（兼容性方法，优先使用全局状态）
-const getCurrentTheme = () => {
-  return globalThemeState.isDark ? 'dark' : 'light';
-};
-
 // 初始化样式
 const initHighlightStyle = () => {
   const isDark = globalThemeState.isDark;
@@ -67,8 +98,10 @@ const initHighlightStyle = () => {
 // 监听主题变化（使用全局主题状态）
 const observeThemeChange = () => {
   // 使用全局主题状态监听器
-  themeUnsubscribe = onThemeChange((newTheme, isDark) => {
+  themeUnsubscribe = onThemeChange((_newTheme, isDark) => {
     loadHighlightStyle(isDark);
+    // 更新 Mermaid 主题
+    updateMermaidTheme(isDark);
     // 重新应用内联样式以确保颜色正确
     nextTick(() => {
       setTimeout(() => {
@@ -133,6 +166,68 @@ marked.setOptions({
   },
 });
 
+// 渲染 Mermaid 图表
+const renderMermaidDiagrams = async () => {
+  if (!contentRef.value || !mermaidInitialized) return;
+
+  const mermaidBlocks = contentRef.value.querySelectorAll('pre code.language-mermaid');
+
+  if (mermaidBlocks.length === 0) return;
+
+  for (const block of mermaidBlocks) {
+    const pre = block.parentElement;
+    const code = block.textContent.trim();
+
+    // 跳过空的代码块
+    if (!code) continue;
+
+    // 生成唯一 ID
+    const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
+
+    try {
+      // 使用 Mermaid API 渲染
+      const { svg } = await mermaid.render(id, code);
+
+      // 创建容器替换原有的代码块
+      const wrapper = document.createElement('div');
+      wrapper.className = 'mermaid-diagram';
+      wrapper.innerHTML = svg;
+
+      // 替换整个 pre 元素
+      pre.replaceWith(wrapper);
+    } catch (err) {
+      console.warn('Mermaid 渲染失败:', err);
+      // 渲染失败时保留原始代码块
+      block.parentElement.classList.add('mermaid-error');
+    }
+  }
+};
+
+// 重新渲染所有 Mermaid 图表（用于主题切换）
+const renderAllMermaidDiagrams = async () => {
+  if (!contentRef.value) return;
+
+  const mermaidDiagrams = contentRef.value.querySelectorAll('.mermaid-diagram');
+
+  for (const diagram of mermaidDiagrams) {
+    const svg = diagram.querySelector('svg');
+    if (!svg) continue;
+
+    // 获取原始代码（存储在 data 属性中）
+    const code = diagram.getAttribute('data-mermaid-code');
+    if (!code) continue;
+
+    const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
+
+    try {
+      const { svg: newSvg } = await mermaid.render(id, code);
+      diagram.innerHTML = newSvg;
+    } catch (err) {
+      console.warn('Mermaid 重新渲染失败:', err);
+    }
+  }
+};
+
 const renderMarkdown = (content) => {
   if (!content) {
     renderedContent.value = '<div class="welcome-screen"><h1>Markdown Viewer</h1><p>文件内容为空</p></div>';
@@ -147,6 +242,7 @@ const renderMarkdown = (content) => {
     addHeadingIds();
     generateTOC();
     setupScrollListener();
+    renderMermaidDiagrams();
 
     // 额外延迟，确保高亮样式完全应用
     setTimeout(() => {
@@ -528,6 +624,8 @@ watch(
 onMounted(() => {
   // 初始化代码高亮样式
   initHighlightStyle();
+  // 初始化 Mermaid
+  initMermaid(globalThemeState.isDark);
   // 监听主题变化
   themeObserver = observeThemeChange();
 
@@ -1054,6 +1152,39 @@ onUnmounted(() => {
 
 .dark-theme :deep(.header-link:hover) {
   background: var(--bg-secondary);
+}
+
+/* Mermaid 图表样式 */
+:deep(.mermaid-diagram) {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 24px 0;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  transition: background-color 0.3s, border-color 0.3s;
+}
+
+:deep(.mermaid-diagram svg) {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Mermaid 渲染错误时的样式 */
+:deep(.mermaid-error) {
+  border: 1px solid #ff6b6b;
+  background: rgba(255, 107, 107, 0.1);
+}
+
+:deep(.mermaid-error::before) {
+  content: '⚠️ Mermaid 渲染失败';
+  display: block;
+  padding: 8px 12px;
+  color: #ff6b6b;
+  font-weight: 600;
+  font-size: 14px;
 }
 </style>
 
