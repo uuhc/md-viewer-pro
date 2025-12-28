@@ -422,11 +422,24 @@ const processCodeBlocks = () => {
       langLabel.textContent = lang;
       header.appendChild(langLabel);
 
+      // 按钮容器
+      const btnContainer = document.createElement('div');
+      btnContainer.className = 'code-btn-container';
+
+      // 换行/取消换行按钮
+      const wrapBtn = document.createElement('button');
+      wrapBtn.className = 'wrap-btn';
+      wrapBtn.innerHTML = '↩ 换行';
+      wrapBtn.addEventListener('click', () => toggleWrap(pre, wrapBtn));
+      btnContainer.appendChild(wrapBtn);
+
       const copyBtn = document.createElement('button');
       copyBtn.className = 'copy-btn';
       copyBtn.innerHTML = '📋 复制';
       copyBtn.addEventListener('click', () => copyCode(code.textContent, copyBtn));
-      header.appendChild(copyBtn);
+      btnContainer.appendChild(copyBtn);
+
+      header.appendChild(btnContainer);
 
       pre.parentNode.insertBefore(wrapper, pre);
       wrapper.appendChild(header);
@@ -477,6 +490,13 @@ const copyCode = (text, button) => {
   }).catch(() => {
     alert('复制失败，请手动选择文本复制');
   });
+};
+
+// 切换代码换行
+const toggleWrap = (pre, button) => {
+  const isWrapped = pre.classList.toggle('code-wrapped');
+  button.innerHTML = isWrapped ? '↪ 取消换行' : '↩ 换行';
+  button.classList.toggle('wrapped', isWrapped);
 };
 
 const addHeadingIds = () => {
@@ -845,6 +865,35 @@ onUnmounted(() => {
   transition: background-color 0.3s, border-color 0.3s, color 0.3s;
 }
 
+:deep(.code-btn-container) {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+:deep(.wrap-btn) {
+  padding: 4px 12px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--code-border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+:deep(.wrap-btn:hover) {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border-color: var(--accent-color);
+}
+
+:deep(.wrap-btn.wrapped) {
+  background: var(--accent-color);
+  color: var(--btn-text);
+  border-color: var(--accent-color);
+}
+
 :deep(.copy-btn) {
   padding: 4px 12px;
   background: var(--accent-color);
@@ -878,6 +927,18 @@ onUnmounted(() => {
   line-height: 1.6;
   color: var(--text-primary);
   transition: background-color 0.3s, border-color 0.3s, color 0.3s;
+}
+
+:deep(.code-block-wrapper pre.code-wrapped) {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  word-break: break-all;
+}
+
+:deep(.code-block-wrapper pre.code-wrapped code) {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  word-break: break-all;
 }
 
 :deep(.code-block-wrapper pre code) {

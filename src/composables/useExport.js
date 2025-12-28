@@ -107,6 +107,16 @@ export function useExport() {
         langLabel.textContent = lang;
         header.appendChild(langLabel);
 
+        // 按钮容器
+        const btnContainer = document.createElement('div');
+        btnContainer.className = 'code-btn-container';
+
+        // 换行按钮
+        const wrapBtn = document.createElement('button');
+        wrapBtn.className = 'wrap-btn';
+        wrapBtn.innerHTML = '↩ 换行';
+        btnContainer.appendChild(wrapBtn);
+
         // 复制按钮（注意：这个按钮的事件监听器不会在导出的 HTML 中使用）
         // 导出的 HTML 使用 script 标签中的 copyToClipboard 函数
         const copyBtn = document.createElement('button');
@@ -143,7 +153,9 @@ export function useExport() {
             alert('复制失败，请手动选择文本复制');
           }
         });
-        header.appendChild(copyBtn);
+        btnContainer.appendChild(copyBtn);
+
+        header.appendChild(btnContainer);
 
         // 包装结构
         pre.parentNode.insertBefore(wrapper, pre);
@@ -681,6 +693,35 @@ body {
   transition: background-color 0.3s, border-color 0.3s, color 0.3s;
 }
 
+.code-btn-container {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.wrap-btn {
+  padding: 4px 12px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--code-border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.wrap-btn:hover {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border-color: var(--accent-color);
+}
+
+.wrap-btn.wrapped {
+  background: var(--accent-color);
+  color: #ffffff;
+  border-color: var(--accent-color);
+}
+
 .copy-btn {
   padding: 4px 12px;
   background: var(--accent-color);
@@ -717,6 +758,18 @@ body {
   line-height: 1.6;
   color: var(--text-primary);
   transition: background-color 0.3s, border-color 0.3s, color 0.3s;
+}
+
+.code-block-wrapper pre.code-wrapped {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  word-break: break-all;
+}
+
+.code-block-wrapper pre.code-wrapped code {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  word-break: break-all;
 }
 
 .code-block-wrapper pre code {
@@ -1130,6 +1183,18 @@ pre code.hljs {
         }
       });
     }
+    
+    // 为所有换行按钮绑定事件
+    document.querySelectorAll('.wrap-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const pre = this.closest('.code-block-wrapper').querySelector('pre');
+        if (!pre) return;
+        
+        const isWrapped = pre.classList.toggle('code-wrapped');
+        this.innerHTML = isWrapped ? '↪ 取消换行' : '↩ 换行';
+        this.classList.toggle('wrapped', isWrapped);
+      });
+    });
     
     // 为所有复制按钮绑定事件
     document.querySelectorAll('.copy-btn').forEach(btn => {
