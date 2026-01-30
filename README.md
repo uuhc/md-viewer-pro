@@ -72,7 +72,7 @@ npm run build
 ## 项目结构
 
 ```
-markdown-viewer/
+md-viewer-pro/
 ├── src/
 │   ├── components/          # Vue 组件
 │   │   ├── FileTree.vue
