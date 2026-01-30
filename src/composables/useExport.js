@@ -65,7 +65,7 @@ export function useExport() {
     }
     
     // 获取图标 base64
-    const iconBase64 = await getIconAsBase64('icon16.png');
+    const iconBase64 = await getIconAsBase64('icons/icon16.png');
     const faviconLink = iconBase64 ? `<link rel="icon" type="image/png" href="${iconBase64}">` : '';
 
     // 克隆内容以避免修改原始 DOM
@@ -1404,4 +1404,3 @@ pre code.hljs {
     exportToHTML,
   };
 }
-

@@ -37,12 +37,19 @@ function copyManifest() {
         }
 
         // 复制图标文件（如果存在）
-        ['icon16.png', 'icon48.png', 'icon128.png'].forEach(icon => {
-          const iconPath = resolve(__dirname, icon);
-          if (existsSync(iconPath)) {
-            copyFileSync(iconPath, resolve(distDir, icon));
+        const iconsSrcDir = resolve(__dirname, 'icons');
+        const iconsDistDir = resolve(distDir, 'icons');
+        if (existsSync(iconsSrcDir)) {
+          if (!existsSync(iconsDistDir)) {
+            mkdirSync(iconsDistDir, { recursive: true });
           }
-        });
+          ['icon16.png', 'icon48.png', 'icon128.png'].forEach(icon => {
+            const iconPath = resolve(iconsSrcDir, icon);
+            if (existsSync(iconPath)) {
+              copyFileSync(iconPath, resolve(iconsDistDir, icon));
+            }
+          });
+        }
       } catch (error) {
         console.error('复制文件失败:', error);
       }
@@ -77,4 +84,3 @@ export default defineConfig({
     },
   },
 });
-

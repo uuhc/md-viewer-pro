@@ -3,6 +3,14 @@
   "version": "1.0.0",
   "description": "Professional Markdown file viewer for Chrome. Auto-preview local MD files with beautiful UI, file tree management, table of contents navigation, code syntax highlighting, and HTML export. Supports dark/light themes.",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/<your-username>/markdown-viewer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/<your-username>/markdown-viewer/issues"
+  },
+  "homepage": "https://github.com/<your-username>/markdown-viewer#readme",
   "scripts": {
     "dev": "vite build --watch --mode development",
     "build": "vite build",
