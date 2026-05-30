@@ -97,6 +97,7 @@ import { useFileManager } from './composables/useFileManager';
 import { useExport } from './composables/useExport';
 import { useTheme, globalThemeState } from './composables/useTheme';
 import { useDocumentStats } from './composables/useDocumentStats';
+import { AUTO_PREVIEW_STORAGE_KEYS, getAutoPreviewFileUrl, readAutoPreviewFile } from './utils/autoPreview';
 
 const tocDrawerOpen = ref(true); // 默认打开目录
 const tocCollapsed = ref(!tocDrawerOpen.value); // 与 tocDrawerOpen 同步
@@ -117,19 +118,25 @@ onMounted(async () => {
     await loadFiles();
 
     // 检查是否是自动预览模式
-    // 方式1: 通过 URL 参数检查（旧方式，用于 viewer.html?auto=true）
     const urlParams = new URLSearchParams(window.location.search);
     const isAutoByUrl = urlParams.get('auto') === 'true';
+    const autoPreviewFileUrl = getAutoPreviewFileUrl(window.location.search);
 
-    // 方式2: 通过 storage 检查（新方式，用于 content script 注入）
-    const storageResult = await chrome.storage.local.get(['autoPreviewFile', 'autoPreviewMode', 'autoPreviewError']);
+    // 兼容旧版本遗留的 storage 自动预览数据。
+    const storageResult = await chrome.storage.local.get(AUTO_PREVIEW_STORAGE_KEYS);
     const isAutoByStorage = storageResult.autoPreviewMode === true || !!storageResult.autoPreviewFile;
 
     const isAuto = isAutoByUrl || isAutoByStorage;
 
     if (isAuto) {
-        // 从 storage 读取自动预览的文件
-        if (storageResult.autoPreviewError) {
+        if (autoPreviewFileUrl) {
+            try {
+                const autoPreviewFile = await readAutoPreviewFile(autoPreviewFileUrl);
+                selectFile(autoPreviewFile);
+            } catch (error) {
+                console.error('自动预览失败:', error);
+            }
+        } else if (storageResult.autoPreviewError) {
             // 显示错误信息
             console.error('自动预览失败:', storageResult.autoPreviewError);
             // 可以在这里显示错误提示
@@ -155,7 +162,7 @@ onMounted(async () => {
 
         // 清除自动预览标记（延迟清除，确保应用已加载）
         setTimeout(() => {
-            chrome.storage.local.remove(['autoPreviewFile', 'autoPreviewMode', 'autoPreviewError']);
+            chrome.storage.local.remove(AUTO_PREVIEW_STORAGE_KEYS);
         }, 1000);
     }
 });

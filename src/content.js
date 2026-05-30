@@ -20,80 +20,8 @@
     return;
   }
 
-  // 读取文件内容 - 通过 background script 读取（避免 CORS 问题）
-  async function loadFileContent() {
-    try {
-      console.log('开始读取文件:', url);
-      // 通过消息传递请求 background script 读取文件
-      const response = await chrome.runtime.sendMessage({
-        action: 'readFile',
-        fileUrl: url
-      });
-      
-      if (!response) {
-        throw new Error('Background script 未响应，请检查扩展是否正常运行');
-      }
-      
-      if (response && response.success) {
-        console.log('文件读取成功，内容长度:', response.content?.length || 0);
-        return response.content;
-      } else {
-        throw new Error(response?.error || '无法读取文件');
-      }
-    } catch (error) {
-      console.error('读取文件失败:', error);
-      // 显示错误提示
-      if (document.body) {
-        const errorDiv = document.createElement('div');
-        errorDiv.style.cssText = `
-          position: fixed;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          background: #fff;
-          padding: 20px;
-          border: 2px solid #ff4d4f;
-          border-radius: 8px;
-          z-index: 1000000;
-          max-width: 500px;
-        `;
-        errorDiv.innerHTML = `
-          <h3 style="color: #ff4d4f; margin: 0 0 10px 0;">预览失败</h3>
-          <p style="margin: 0; color: #666;">${error.message}</p>
-        `;
-        document.body.appendChild(errorDiv);
-      }
-      return null;
-    }
-  }
-
   // 创建预览界面
   async function createPreview() {
-    const content = await loadFileContent();
-    if (!content) {
-      console.error('无法读取文件内容');
-      return;
-    }
-
-    // 提取文件名
-    const fileName = decodeURIComponent(new URL(url).pathname.split('/').pop() || 'untitled.md');
-
-    // 创建文件数据对象
-    const fileData = {
-      id: Date.now(),
-      name: fileName,
-      content: content,
-      lastModified: Date.now(),
-      url: url,
-      isAutoPreview: true,
-    };
-
-    // 先保存到 storage，确保数据已准备好
-    await chrome.storage.local.set({
-      autoPreviewFile: fileData,
-      autoPreviewMode: true,
-    });
-
     // 创建 iframe 嵌入预览页面
     const wrapper = document.createElement('div');
     wrapper.id = 'markdown-viewer-wrapper';
@@ -108,7 +36,7 @@
     `;
 
     const iframe = document.createElement('iframe');
-    iframe.src = chrome.runtime.getURL('viewer.html?auto=true');
+    iframe.src = chrome.runtime.getURL(`viewer.html?auto=true&file=${encodeURIComponent(url)}`);
     iframe.style.cssText = `
       width: 100%;
       height: 100%;
